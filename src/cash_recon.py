@@ -15,6 +15,7 @@ from parser import parse_expenses_file
 from reports import build_range_rows, compute_day_summary
 from utils import (
     format_display_date,
+    get_week_bounds,
     iter_date_strings,
     parse_iso_date,
     resolve_report_date,
@@ -39,6 +40,110 @@ def non_negative_decimal(value: str) -> Decimal:
 
 def fmt_money(value: Decimal) -> str:
     return f"{value:.2f}"
+
+
+def load_range_rows(
+    start_date: str,
+    end_date: str,
+    db_path: str,
+) -> list[dict]:
+    date_strings = iter_date_strings(start_date, end_date)
+
+    report_rows = get_reports_in_range(start_date, end_date, db_path=db_path)
+    expense_rows = get_expenses_in_range(start_date, end_date, db_path=db_path)
+
+    reports_by_date = {
+        row["report_date"]: {
+            "cash_in_report": Decimal(row["cash_in_report"]),
+            "cash_in_till": Decimal(row["cash_in_till"]),
+        }
+        for row in report_rows
+    }
+
+    expenses_by_date: dict[str, list[dict[str, str | Decimal]]] = {}
+    for row in expense_rows:
+        report_date = row["report_date"]
+        expenses_by_date.setdefault(report_date, []).append(
+            {
+                "amount": Decimal(row["amount"]),
+                "description": row["description"],
+            }
+        )
+
+    return build_range_rows(
+        date_strings=date_strings,
+        reports_by_date=reports_by_date,
+        expenses_by_date=expenses_by_date,
+    )
+
+
+def print_range_rows(
+    start_date: str,
+    end_date: str,
+    range_rows: list[dict],
+    include_expenses: bool,
+    label: str = "RANGE",
+) -> None:
+    print(
+        f"{label}: {format_display_date(start_date)} — "
+        f"{format_display_date(end_date)}"
+    )
+    print()
+    print(
+        f"{'DATE':<15} "
+        f"{'CASH REP':>10} "
+        f"{'CASH TILL':>10} "
+        f"{'EXPENSES':>10} "
+        f"{'TILL+EXP':>10} "
+        f"{'DIFF':>10} "
+        f"{'CUM REP':>10} "
+        f"{'CUM TILL':>10} "
+        f"{'CUM EXP':>10} "
+        f"{'CUM T+E':>10} "
+        f"{'CUM DIFF':>10}"
+    )
+
+    for row in range_rows:
+        if row["has_data"]:
+            print(
+                f"{format_display_date(row['date']):<15} "
+                f"{fmt_money(row['cash_in_report']):>10} "
+                f"{fmt_money(row['cash_in_till']):>10} "
+                f"{fmt_money(row['expenses_total']):>10} "
+                f"{fmt_money(row['till_plus_expenses']):>10} "
+                f"{fmt_money(row['difference']):>10} "
+                f"{fmt_money(row['cum_cash_in_report']):>10} "
+                f"{fmt_money(row['cum_cash_in_till']):>10} "
+                f"{fmt_money(row['cum_expenses_total']):>10} "
+                f"{fmt_money(row['cum_till_plus_expenses']):>10} "
+                f"{fmt_money(row['cum_difference']):>10}"
+            )
+        else:
+            print(
+                f"{format_display_date(row['date']):<15} "
+                f"{'-':>10} "
+                f"{'-':>10} "
+                f"{'-':>10} "
+                f"{'-':>10} "
+                f"{'-':>10} "
+                f"{fmt_money(row['cum_cash_in_report']):>10} "
+                f"{fmt_money(row['cum_cash_in_till']):>10} "
+                f"{fmt_money(row['cum_expenses_total']):>10} "
+                f"{fmt_money(row['cum_till_plus_expenses']):>10} "
+                f"{fmt_money(row['cum_difference']):>10}"
+            )
+
+        if include_expenses and row["has_data"]:
+            expenses = row["expenses"]
+            if expenses:
+                print("  Expenses:")
+                for index, expense in enumerate(expenses, start=1):
+                    amount = Decimal(str(expense["amount"]))
+                    description = str(expense["description"]).strip()
+                    if description:
+                        print(f"    {index:>2}. £{amount}  {description}")
+                    else:
+                        print(f"    {index:>2}. £{amount}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -126,6 +231,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="End date in YYYY-MM-DD format",
     )
     show_range_cmd.add_argument(
+        "--include-expenses",
+        action="store_true",
+        help="Show the detailed expense list under each day",
+    )
+
+    show_week_cmd = subparsers.add_parser(
+        "show-week",
+        help="Show the full Monday-to-Sunday week for a given date",
+    )
+    show_week_cmd.add_argument(
+        "--date",
+        required=True,
+        help="Any date within the target week, in YYYY-MM-DD format",
+    )
+    show_week_cmd.add_argument(
+        "--include-expenses",
+        action="store_true",
+        help="Show the detailed expense list under each day",
+    )
+
+    show_week_to_date_cmd = subparsers.add_parser(
+        "show-week-to-date",
+        help="Show Monday up to the given date within the same week",
+    )
+    show_week_to_date_cmd.add_argument(
+        "--date",
+        help="End date in YYYY-MM-DD format. Defaults to today.",
+    )
+    show_week_to_date_cmd.add_argument(
         "--include-expenses",
         action="store_true",
         help="Show the detailed expense list under each day",
@@ -233,96 +367,59 @@ def main() -> None:
     if args.command == "show-range":
         start_date = parse_iso_date(args.date_from).isoformat()
         end_date = parse_iso_date(args.date_to).isoformat()
-        date_strings = iter_date_strings(start_date, end_date)
 
-        report_rows = get_reports_in_range(start_date, end_date, db_path=args.db_path)
-        expense_rows = get_expenses_in_range(start_date, end_date, db_path=args.db_path)
-
-        reports_by_date = {
-            row["report_date"]: {
-                "cash_in_report": Decimal(row["cash_in_report"]),
-                "cash_in_till": Decimal(row["cash_in_till"]),
-            }
-            for row in report_rows
-        }
-
-        expenses_by_date: dict[str, list[dict[str, str | Decimal]]] = {}
-        for row in expense_rows:
-            report_date = row["report_date"]
-            expenses_by_date.setdefault(report_date, []).append(
-                {
-                    "amount": Decimal(row["amount"]),
-                    "description": row["description"],
-                }
-            )
-
-        range_rows = build_range_rows(
-            date_strings=date_strings,
-            reports_by_date=reports_by_date,
-            expenses_by_date=expenses_by_date,
+        range_rows = load_range_rows(
+            start_date=start_date,
+            end_date=end_date,
+            db_path=args.db_path,
         )
 
-        print(
-            f"RANGE: {format_display_date(start_date)} — "
-            f"{format_display_date(end_date)}"
+        print_range_rows(
+            start_date=start_date,
+            end_date=end_date,
+            range_rows=range_rows,
+            include_expenses=args.include_expenses,
+            label="RANGE",
         )
-        print()
-        print(
-            f"{'DATE':<15} "
-            f"{'CASH REP':>10} "
-            f"{'CASH TILL':>10} "
-            f"{'EXPENSES':>10} "
-            f"{'TILL+EXP':>10} "
-            f"{'DIFF':>10} "
-            f"{'CUM REP':>10} "
-            f"{'CUM TILL':>10} "
-            f"{'CUM EXP':>10} "
-            f"{'CUM T+E':>10} "
-            f"{'CUM DIFF':>10}"
+        return
+
+    if args.command == "show-week":
+        selected_date = parse_iso_date(args.date).isoformat()
+        start_date, end_date = get_week_bounds(selected_date)
+
+        range_rows = load_range_rows(
+            start_date=start_date,
+            end_date=end_date,
+            db_path=args.db_path,
         )
 
-        for row in range_rows:
-            if row["has_data"]:
-                print(
-                    f"{format_display_date(row['date']):<15} "
-                    f"{fmt_money(row['cash_in_report']):>10} "
-                    f"{fmt_money(row['cash_in_till']):>10} "
-                    f"{fmt_money(row['expenses_total']):>10} "
-                    f"{fmt_money(row['till_plus_expenses']):>10} "
-                    f"{fmt_money(row['difference']):>10} "
-                    f"{fmt_money(row['cum_cash_in_report']):>10} "
-                    f"{fmt_money(row['cum_cash_in_till']):>10} "
-                    f"{fmt_money(row['cum_expenses_total']):>10} "
-                    f"{fmt_money(row['cum_till_plus_expenses']):>10} "
-                    f"{fmt_money(row['cum_difference']):>10}"
-                )
-            else:
-                print(
-                    f"{format_display_date(row['date']):<15} "
-                    f"{'-':>10} "
-                    f"{'-':>10} "
-                    f"{'-':>10} "
-                    f"{'-':>10} "
-                    f"{'-':>10} "
-                    f"{fmt_money(row['cum_cash_in_report']):>10} "
-                    f"{fmt_money(row['cum_cash_in_till']):>10} "
-                    f"{fmt_money(row['cum_expenses_total']):>10} "
-                    f"{fmt_money(row['cum_till_plus_expenses']):>10} "
-                    f"{fmt_money(row['cum_difference']):>10}"
-                )
+        print_range_rows(
+            start_date=start_date,
+            end_date=end_date,
+            range_rows=range_rows,
+            include_expenses=args.include_expenses,
+            label="WEEK",
+        )
+        return
 
-            if args.include_expenses and row["has_data"]:
-                expenses = row["expenses"]
-                if expenses:
-                    print("  Expenses:")
-                    for index, expense in enumerate(expenses, start=1):
-                        amount = Decimal(str(expense["amount"]))
-                        description = str(expense["description"]).strip()
-                        if description:
-                            print(f"    {index:>2}. £{amount}  {description}")
-                        else:
-                            print(f"    {index:>2}. £{amount}")
+    if args.command == "show-week-to-date":
+        selected_date = resolve_report_date(args.date)
+        start_date, _ = get_week_bounds(selected_date)
+        end_date = selected_date
 
+        range_rows = load_range_rows(
+            start_date=start_date,
+            end_date=end_date,
+            db_path=args.db_path,
+        )
+
+        print_range_rows(
+            start_date=start_date,
+            end_date=end_date,
+            range_rows=range_rows,
+            include_expenses=args.include_expenses,
+            label="WEEK-TO-DATE",
+        )
         return
 
 

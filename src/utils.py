@@ -40,3 +40,10 @@ def iter_date_strings(start_date_text: str, end_date_text: str) -> list[str]:
         current += timedelta(days=1)
 
     return dates
+
+
+def get_week_bounds(date_text: str) -> tuple[str, str]:
+    d = parse_iso_date(date_text)
+    monday = d - timedelta(days=d.weekday())
+    sunday = monday + timedelta(days=6)
+    return monday.isoformat(), sunday.isoformat()
