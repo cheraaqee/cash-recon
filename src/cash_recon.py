@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from db import (
     get_day_report,
@@ -12,7 +13,11 @@ from db import (
     upsert_day_report,
 )
 from parser import parse_expenses_file
-from reports import build_range_rows, compute_day_summary
+from reports import (
+    build_range_rows,
+    compute_day_summary,
+    generate_range_latex,
+)
 from utils import (
     format_display_date,
     get_week_bounds,
@@ -146,6 +151,12 @@ def print_range_rows(
                         print(f"    {index:>2}. £{amount}")
 
 
+def write_text_file(path: str | Path, content: str) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(content, encoding="utf-8")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Cash reconciliation tool"
@@ -263,6 +274,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-expenses",
         action="store_true",
         help="Show the detailed expense list under each day",
+    )
+
+    export_range_latex_cmd = subparsers.add_parser(
+        "export-range-latex",
+        help="Export a date range report as a LaTeX file",
+    )
+    export_range_latex_cmd.add_argument(
+        "--from",
+        dest="date_from",
+        required=True,
+        help="Start date in YYYY-MM-DD format",
+    )
+    export_range_latex_cmd.add_argument(
+        "--to",
+        dest="date_to",
+        required=True,
+        help="End date in YYYY-MM-DD format",
+    )
+    export_range_latex_cmd.add_argument(
+        "--output",
+        required=True,
+        help="Output .tex file path",
+    )
+    export_range_latex_cmd.add_argument(
+        "--include-expenses",
+        action="store_true",
+        help="Include detailed expenses in one cell per day",
+    )
+    export_range_latex_cmd.add_argument(
+        "--title",
+        default="Cash Reconciliation Report",
+        help="Document title",
     )
 
     return parser
@@ -420,6 +463,28 @@ def main() -> None:
             include_expenses=args.include_expenses,
             label="WEEK-TO-DATE",
         )
+        return
+
+    if args.command == "export-range-latex":
+        start_date = parse_iso_date(args.date_from).isoformat()
+        end_date = parse_iso_date(args.date_to).isoformat()
+
+        range_rows = load_range_rows(
+            start_date=start_date,
+            end_date=end_date,
+            db_path=args.db_path,
+        )
+
+        latex_content = generate_range_latex(
+            title=args.title,
+            start_date_display=format_display_date(start_date),
+            end_date_display=format_display_date(end_date),
+            range_rows=range_rows,
+            include_expenses=args.include_expenses,
+        )
+
+        write_text_file(args.output, latex_content)
+        print(f"Wrote LaTeX report to: {args.output}")
         return
 
 

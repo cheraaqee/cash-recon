@@ -87,3 +87,159 @@ def build_range_rows(
         )
 
     return rows
+
+
+def latex_escape(text: str) -> str:
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+
+    escaped = []
+    for char in text:
+        escaped.append(replacements.get(char, char))
+    return "".join(escaped)
+
+
+def format_money(value: Decimal) -> str:
+    return f"{value:.2f}"
+
+
+def build_expenses_cell(expenses: list[dict[str, Any]]) -> str:
+    if not expenses:
+        return ""
+
+    lines: list[str] = []
+    for expense in expenses:
+        amount = format_money(Decimal(str(expense["amount"])))
+        description = str(expense["description"]).strip()
+
+        if description:
+            lines.append(rf"\pounds {amount} -- {latex_escape(description)}")
+        else:
+            lines.append(rf"\pounds {amount}")
+
+    joined_lines = r" \\ ".join(lines)
+    return rf"\makecell[l]{{{joined_lines}}}"
+
+def generate_range_latex(
+    title: str,
+    start_date_display: str,
+    end_date_display: str,
+    range_rows: list[dict[str, Any]],
+    include_expenses: bool = False,
+) -> str:
+    if include_expenses:
+        column_spec = (
+            r"p{3.2cm} r r r r r| r r r r r p{5.8cm}"
+        )
+        header = (
+            r"Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & "
+            r"Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff & Expense Details \\"
+        )
+    else:
+        column_spec = r"p{3.2cm} r r r r r r r r r r"
+        header = (
+            r"Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & "
+            r"Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff \\"
+        )
+
+    body_lines: list[str] = []
+
+    for row in range_rows:
+        if row["has_data"]:
+            values = [
+                latex_escape(row["date"]),
+                format_money(row["cash_in_report"]),
+                format_money(row["cash_in_till"]),
+                format_money(row["expenses_total"]),
+                format_money(row["till_plus_expenses"]),
+                format_money(row["difference"]),
+                format_money(row["cum_cash_in_report"]),
+                format_money(row["cum_cash_in_till"]),
+                format_money(row["cum_expenses_total"]),
+                format_money(row["cum_till_plus_expenses"]),
+                format_money(row["cum_difference"]),
+            ]
+        else:
+            values = [
+                latex_escape(row["date"]),
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                format_money(row["cum_cash_in_report"]),
+                format_money(row["cum_cash_in_till"]),
+                format_money(row["cum_expenses_total"]),
+                format_money(row["cum_till_plus_expenses"]),
+                format_money(row["cum_difference"]),
+            ]
+
+        if include_expenses:
+            expense_cell = build_expenses_cell(row["expenses"]) if row["has_data"] else ""
+            values.append(expense_cell)
+
+        line = " & ".join(values) + r" \\ \hline"
+        body_lines.append(line)
+
+    body = "\n".join(body_lines)
+
+    latex = rf"""
+\documentclass[11pt]{{article}}
+\usepackage[a4paper,margin=1.5cm]{{geometry}}
+\usepackage{{array}}
+\usepackage{{longtable}}
+\usepackage{{booktabs}}
+\usepackage{{pdflscape}}
+\usepackage{{textcomp}}
+\usepackage{{lmodern}}
+\usepackage{{makecell}}
+
+\begin{{document}}
+
+\begin{{landscape}}
+
+\section*{{{latex_escape(title)}}}
+\noindent
+Range: {latex_escape(start_date_display)} --- {latex_escape(end_date_display)}
+
+\bigskip
+
+\footnotesize
+\setlength{{\LTleft}}{{0pt}}
+\setlength{{\LTright}}{{0pt}}
+
+\begin{{longtable}}{{{column_spec}}}
+\toprule
+{header}
+\midrule
+\endfirsthead
+
+\toprule
+{header}
+\midrule
+\endhead
+
+\bottomrule
+\endfoot
+
+{body}
+\end{{longtable}}
+
+\end{{landscape}}
+
+\end{{document}}
+""".strip(
+        "\n"
+    )
+
+    return latex
