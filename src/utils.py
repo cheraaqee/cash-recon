@@ -22,3 +22,8 @@ def resolve_report_date(date_text: str | None) -> str:
         return date.today().isoformat()
 
     return parse_iso_date(date_text).isoformat()
+
+
+def format_display_date(date_text: str) -> str:
+    d = parse_iso_date(date_text)
+    return d.strftime("%a %d %b %Y").upper()

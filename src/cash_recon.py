@@ -3,9 +3,15 @@ from __future__ import annotations
 import argparse
 from decimal import Decimal, InvalidOperation
 
-from db import init_db, upsert_day_report
+from db import (
+    get_day_report,
+    get_expenses_for_day,
+    init_db,
+    upsert_day_report,
+)
 from parser import parse_expenses_file
-from utils import resolve_report_date
+from reports import compute_day_summary
+from utils import format_display_date, parse_iso_date, resolve_report_date
 
 
 def non_negative_decimal(value: str) -> Decimal:
@@ -77,6 +83,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the expenses text file",
     )
 
+    show_day_cmd = subparsers.add_parser(
+        "show-day",
+        help="Show one day's report",
+    )
+    show_day_cmd.add_argument(
+        "--date",
+        required=True,
+        help="Report date in YYYY-MM-DD format",
+    )
+    show_day_cmd.add_argument(
+        "--include-expenses",
+        action="store_true",
+        help="Show the detailed expense list",
+    )
+
     return parser
 
 
@@ -114,19 +135,66 @@ def main() -> None:
             db_path=args.db_path,
         )
 
-        expenses_total = sum(
-            Decimal(str(expense["amount"])) for expense in expenses
+        summary = compute_day_summary(
+            cash_in_report=args.cash_report,
+            cash_in_till=args.cash_till,
+            expenses=expenses,
         )
-        till_plus_expenses = args.cash_till + expenses_total
-        difference = till_plus_expenses - args.cash_report
 
         print(f"Saved report for: {report_date}")
         print(f"Cash-in report:   £{args.cash_report}")
         print(f"Cash in till:     £{args.cash_till}")
-        print(f"Expenses total:   £{expenses_total}")
-        print(f"Till + expenses:  £{till_plus_expenses}")
-        print(f"Difference:       £{difference}")
+        print(f"Expenses total:   £{summary['expenses_total']}")
+        print(f"Till + expenses:  £{summary['till_plus_expenses']}")
+        print(f"Difference:       £{summary['difference']}")
         print(f"Expenses count:   {len(expenses)}")
+        return
+
+    if args.command == "show-day":
+        report_date = parse_iso_date(args.date).isoformat()
+
+        day_row = get_day_report(report_date, db_path=args.db_path)
+        if day_row is None:
+            print(f"No report found for date: {report_date}")
+            return
+
+        expense_rows = get_expenses_for_day(report_date, db_path=args.db_path)
+
+        expenses = [
+            {
+                "amount": Decimal(row["amount"]),
+                "description": row["description"],
+            }
+            for row in expense_rows
+        ]
+
+        summary = compute_day_summary(
+            cash_in_report=Decimal(day_row["cash_in_report"]),
+            cash_in_till=Decimal(day_row["cash_in_till"]),
+            expenses=expenses,
+        )
+
+        print(f"DATE: {format_display_date(report_date)}")
+        print()
+        print(f"Cash-in report:   £{Decimal(day_row['cash_in_report'])}")
+        print(f"Cash in till:     £{Decimal(day_row['cash_in_till'])}")
+        print(f"Expenses total:   £{summary['expenses_total']}")
+        print(f"Till + expenses:  £{summary['till_plus_expenses']}")
+        print(f"Difference:       £{summary['difference']}")
+
+        if args.include_expenses:
+            print()
+            print("Expenses:")
+            if not expenses:
+                print("  (none)")
+            else:
+                for index, expense in enumerate(expenses, start=1):
+                    amount = expense["amount"]
+                    description = str(expense["description"]).strip()
+                    if description:
+                        print(f"  {index:>2}. £{amount}  {description}")
+                    else:
+                        print(f"  {index:>2}. £{amount}")
         return
 
 

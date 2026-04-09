@@ -97,3 +97,38 @@ def upsert_day_report(
                 for expense in expenses
             ],
         )
+
+
+def get_day_report(
+    report_date: str,
+    db_path: str | Path = DEFAULT_DB_PATH,
+) -> sqlite3.Row | None:
+    with get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT report_date, cash_in_report, cash_in_till
+            FROM daily_reports
+            WHERE report_date = ?
+            """,
+            (report_date,),
+        ).fetchone()
+
+    return row
+
+
+def get_expenses_for_day(
+    report_date: str,
+    db_path: str | Path = DEFAULT_DB_PATH,
+) -> list[sqlite3.Row]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, amount, description
+            FROM expenses
+            WHERE report_date = ?
+            ORDER BY id ASC
+            """,
+            (report_date,),
+        ).fetchall()
+
+    return rows
