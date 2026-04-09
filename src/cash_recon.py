@@ -6,12 +6,19 @@ from decimal import Decimal, InvalidOperation
 from db import (
     get_day_report,
     get_expenses_for_day,
+    get_expenses_in_range,
+    get_reports_in_range,
     init_db,
     upsert_day_report,
 )
 from parser import parse_expenses_file
-from reports import compute_day_summary
-from utils import format_display_date, parse_iso_date, resolve_report_date
+from reports import build_range_rows, compute_day_summary
+from utils import (
+    format_display_date,
+    iter_date_strings,
+    parse_iso_date,
+    resolve_report_date,
+)
 
 
 def non_negative_decimal(value: str) -> Decimal:
@@ -28,6 +35,10 @@ def non_negative_decimal(value: str) -> Decimal:
         )
 
     return result
+
+
+def fmt_money(value: Decimal) -> str:
+    return f"{value:.2f}"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -96,6 +107,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-expenses",
         action="store_true",
         help="Show the detailed expense list",
+    )
+
+    show_range_cmd = subparsers.add_parser(
+        "show-range",
+        help="Show reports for a date range with cumulative totals",
+    )
+    show_range_cmd.add_argument(
+        "--from",
+        dest="date_from",
+        required=True,
+        help="Start date in YYYY-MM-DD format",
+    )
+    show_range_cmd.add_argument(
+        "--to",
+        dest="date_to",
+        required=True,
+        help="End date in YYYY-MM-DD format",
+    )
+    show_range_cmd.add_argument(
+        "--include-expenses",
+        action="store_true",
+        help="Show the detailed expense list under each day",
     )
 
     return parser
@@ -195,6 +228,101 @@ def main() -> None:
                         print(f"  {index:>2}. £{amount}  {description}")
                     else:
                         print(f"  {index:>2}. £{amount}")
+        return
+
+    if args.command == "show-range":
+        start_date = parse_iso_date(args.date_from).isoformat()
+        end_date = parse_iso_date(args.date_to).isoformat()
+        date_strings = iter_date_strings(start_date, end_date)
+
+        report_rows = get_reports_in_range(start_date, end_date, db_path=args.db_path)
+        expense_rows = get_expenses_in_range(start_date, end_date, db_path=args.db_path)
+
+        reports_by_date = {
+            row["report_date"]: {
+                "cash_in_report": Decimal(row["cash_in_report"]),
+                "cash_in_till": Decimal(row["cash_in_till"]),
+            }
+            for row in report_rows
+        }
+
+        expenses_by_date: dict[str, list[dict[str, str | Decimal]]] = {}
+        for row in expense_rows:
+            report_date = row["report_date"]
+            expenses_by_date.setdefault(report_date, []).append(
+                {
+                    "amount": Decimal(row["amount"]),
+                    "description": row["description"],
+                }
+            )
+
+        range_rows = build_range_rows(
+            date_strings=date_strings,
+            reports_by_date=reports_by_date,
+            expenses_by_date=expenses_by_date,
+        )
+
+        print(
+            f"RANGE: {format_display_date(start_date)} — "
+            f"{format_display_date(end_date)}"
+        )
+        print()
+        print(
+            f"{'DATE':<15} "
+            f"{'CASH REP':>10} "
+            f"{'CASH TILL':>10} "
+            f"{'EXPENSES':>10} "
+            f"{'TILL+EXP':>10} "
+            f"{'DIFF':>10} "
+            f"{'CUM REP':>10} "
+            f"{'CUM TILL':>10} "
+            f"{'CUM EXP':>10} "
+            f"{'CUM T+E':>10} "
+            f"{'CUM DIFF':>10}"
+        )
+
+        for row in range_rows:
+            if row["has_data"]:
+                print(
+                    f"{format_display_date(row['date']):<15} "
+                    f"{fmt_money(row['cash_in_report']):>10} "
+                    f"{fmt_money(row['cash_in_till']):>10} "
+                    f"{fmt_money(row['expenses_total']):>10} "
+                    f"{fmt_money(row['till_plus_expenses']):>10} "
+                    f"{fmt_money(row['difference']):>10} "
+                    f"{fmt_money(row['cum_cash_in_report']):>10} "
+                    f"{fmt_money(row['cum_cash_in_till']):>10} "
+                    f"{fmt_money(row['cum_expenses_total']):>10} "
+                    f"{fmt_money(row['cum_till_plus_expenses']):>10} "
+                    f"{fmt_money(row['cum_difference']):>10}"
+                )
+            else:
+                print(
+                    f"{format_display_date(row['date']):<15} "
+                    f"{'-':>10} "
+                    f"{'-':>10} "
+                    f"{'-':>10} "
+                    f"{'-':>10} "
+                    f"{'-':>10} "
+                    f"{fmt_money(row['cum_cash_in_report']):>10} "
+                    f"{fmt_money(row['cum_cash_in_till']):>10} "
+                    f"{fmt_money(row['cum_expenses_total']):>10} "
+                    f"{fmt_money(row['cum_till_plus_expenses']):>10} "
+                    f"{fmt_money(row['cum_difference']):>10}"
+                )
+
+            if args.include_expenses and row["has_data"]:
+                expenses = row["expenses"]
+                if expenses:
+                    print("  Expenses:")
+                    for index, expense in enumerate(expenses, start=1):
+                        amount = Decimal(str(expense["amount"]))
+                        description = str(expense["description"]).strip()
+                        if description:
+                            print(f"    {index:>2}. £{amount}  {description}")
+                        else:
+                            print(f"    {index:>2}. £{amount}")
+
         return
 
 

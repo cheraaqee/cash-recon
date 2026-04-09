@@ -132,3 +132,41 @@ def get_expenses_for_day(
         ).fetchall()
 
     return rows
+
+
+def get_reports_in_range(
+    start_date: str,
+    end_date: str,
+    db_path: str | Path = DEFAULT_DB_PATH,
+) -> list[sqlite3.Row]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT report_date, cash_in_report, cash_in_till
+            FROM daily_reports
+            WHERE report_date BETWEEN ? AND ?
+            ORDER BY report_date ASC
+            """,
+            (start_date, end_date),
+        ).fetchall()
+
+    return rows
+
+
+def get_expenses_in_range(
+    start_date: str,
+    end_date: str,
+    db_path: str | Path = DEFAULT_DB_PATH,
+) -> list[sqlite3.Row]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, report_date, amount, description
+            FROM expenses
+            WHERE report_date BETWEEN ? AND ?
+            ORDER BY report_date ASC, id ASC
+            """,
+            (start_date, end_date),
+        ).fetchall()
+
+    return rows
