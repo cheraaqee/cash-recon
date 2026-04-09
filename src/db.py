@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from decimal import Decimal
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path("data/cash_recon.db")
@@ -42,4 +43,57 @@ def init_db(db_path: str | Path = DEFAULT_DB_PATH) -> None:
             CREATE INDEX IF NOT EXISTS idx_expenses_report_date
             ON expenses(report_date);
             """
+        )
+
+
+def upsert_day_report(
+    report_date: str,
+    cash_in_report: Decimal,
+    cash_in_till: Decimal,
+    expenses: list[dict[str, str | Decimal]],
+    db_path: str | Path = DEFAULT_DB_PATH,
+) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO daily_reports (
+                report_date,
+                cash_in_report,
+                cash_in_till
+            )
+            VALUES (?, ?, ?)
+            ON CONFLICT(report_date) DO UPDATE SET
+                cash_in_report = excluded.cash_in_report,
+                cash_in_till = excluded.cash_in_till,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                report_date,
+                str(cash_in_report),
+                str(cash_in_till),
+            ),
+        )
+
+        conn.execute(
+            "DELETE FROM expenses WHERE report_date = ?",
+            (report_date,),
+        )
+
+        conn.executemany(
+            """
+            INSERT INTO expenses (
+                report_date,
+                amount,
+                description
+            )
+            VALUES (?, ?, ?)
+            """,
+            [
+                (
+                    report_date,
+                    str(expense["amount"]),
+                    str(expense["description"]),
+                )
+                for expense in expenses
+            ],
         )
