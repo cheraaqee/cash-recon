@@ -1,0 +1,50 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1.5cm]{geometry}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{pdflscape}
+\usepackage{textcomp}
+\usepackage{lmodern}
+\usepackage{makecell}
+
+\begin{document}
+
+\begin{landscape}
+
+\section*{Weekly Cash Reconciliation Report}
+\noindent
+Range: MON 06 APR 2026 --- SUN 12 APR 2026
+
+\bigskip
+
+\footnotesize
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+
+\begin{longtable}{p{3.2cm} r r r r r| r r r r r p{5.8cm}}
+\toprule
+Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff & Expense Details \\
+\midrule
+\endfirsthead
+
+\toprule
+Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff & Expense Details \\
+\midrule
+\endhead
+
+\bottomrule
+\endfoot
+
+2026-04-06 & - & - & - & - & - & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 &  \\ \hline
+2026-04-07 & 500.00 & 457.55 & 42.45 & 500.00 & 0.00 & 500.00 & 457.55 & 42.45 & 500.00 & 0.00 & \makecell[l]{\pounds 18.50 -- Milk \\ \pounds 7.20 -- Cleaning spray \\ \pounds 12.00 \\ \pounds 4.75 -- Bread} \\ \hline
+2026-04-08 & 300.00 & 260.00 & 42.45 & 302.45 & 2.45 & 800.00 & 717.55 & 84.90 & 802.45 & 2.45 & \makecell[l]{\pounds 18.50 -- Milk \\ \pounds 7.20 -- Cleaning spray \\ \pounds 12.00 \\ \pounds 4.75 -- Bread} \\ \hline
+2026-04-09 & 100.00 & 57.55 & 42.45 & 100.00 & 0.00 & 900.00 & 775.10 & 127.35 & 902.45 & 2.45 & \makecell[l]{\pounds 18.50 -- Milk \\ \pounds 7.20 -- Cleaning spray \\ \pounds 12.00 \\ \pounds 4.75 -- Bread} \\ \hline
+2026-04-10 & 200.00 & 157.55 & 42.45 & 200.00 & 0.00 & 1100.00 & 932.65 & 169.80 & 1102.45 & 2.45 & \makecell[l]{\pounds 18.50 -- Milk \\ \pounds 7.20 -- Cleaning spray \\ \pounds 12.00 \\ \pounds 4.75 -- Bread} \\ \hline
+2026-04-11 & - & - & - & - & - & 1100.00 & 932.65 & 169.80 & 1102.45 & 2.45 &  \\ \hline
+2026-04-12 & - & - & - & - & - & 1100.00 & 932.65 & 169.80 & 1102.45 & 2.45 &  \\ \hline
+\end{longtable}
+
+\end{landscape}
+
+\end{document}

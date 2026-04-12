@@ -146,7 +146,7 @@ def generate_range_latex(
             r"Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff & Expense Details \\"
         )
     else:
-        column_spec = r"p{3.2cm} r r r r r r r r r r"
+        column_spec = r"p{3.2cm} r r r r r | r r r r r"
         header = (
             r"Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & "
             r"Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff \\"
