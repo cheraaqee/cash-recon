@@ -1,0 +1,6 @@
+date,has_data,cash_in_report,cash_in_till,expenses_total,till_plus_expenses,difference,cum_cash_in_report,cum_cash_in_till,cum_expenses_total,cum_till_plus_expenses,cum_difference,expense_details
+2026-04-06,yes,100.00,85.00,15.00,100.00,0.00,100.00,85.00,15.00,100.00,0.00,"10.00 -- Milk
+5.00 -- Bread"
+2026-04-07,yes,120.00,110.00,10.00,120.00,0.00,220.00,195.00,25.00,220.00,0.00,"7.50 -- Cleaning
+2.50"
+2026-04-08,yes,90.00,78.00,12.00,90.00,0.00,310.00,273.00,37.00,310.00,0.00,12.00 -- Supplies

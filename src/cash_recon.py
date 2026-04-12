@@ -17,6 +17,7 @@ from reports import (
         build_range_rows,
         compute_day_summary,
         generate_range_latex,
+        write_range_csv
         )
 from utils import (
         format_display_date,
@@ -355,6 +356,72 @@ def build_parser() -> argparse.ArgumentParser:
             default="Week-to-Date Cash Reconciliation Report",
             help="Document title",
             )
+    export_range_csv_cmd = subparsers.add_parser(
+            "export-range-csv",
+            help="Export a date range report as a CSV file",
+            )
+    export_range_csv_cmd.add_argument(
+            "--from",
+            dest="date_from",
+            required=True,
+            help="Start date in YYYY-MM-DD format",
+            )
+    export_range_csv_cmd.add_argument(
+            "--to",
+            dest="date_to",
+            required=True,
+            help="End date in YYYY-MM-DD format",
+            )
+    export_range_csv_cmd.add_argument(
+            "--output",
+            required=True,
+            help="Output .csv file path",
+            )
+    export_range_csv_cmd.add_argument(
+            "--include-expenses",
+            action="store_true",
+            help="Include expense details as a newline-separated field",
+            )
+
+    export_week_csv_cmd = subparsers.add_parser(
+            "export-week-csv",
+            help="Export the full Monday-to-Sunday week as a CSV file",
+            )
+    export_week_csv_cmd.add_argument(
+            "--date",
+            required=True,
+            help="Any date within the target week (YYYY-MM-DD)",
+            )
+    export_week_csv_cmd.add_argument(
+            "--output",
+            required=True,
+            help="Output .csv file path",
+            )
+    export_week_csv_cmd.add_argument(
+            "--include-expenses",
+            action="store_true",
+            help="Include expense details as a newline-separated field",
+            )
+
+    export_week_to_date_csv_cmd = subparsers.add_parser(
+            "export-week-to-date-csv",
+            help="Export Monday up to the given date as a CSV file",
+            )
+    export_week_to_date_csv_cmd.add_argument(
+            "--date",
+            help="End date in YYYY-MM-DD format. Defaults to today.",
+            )
+    export_week_to_date_csv_cmd.add_argument(
+            "--output",
+            required=True,
+            help="Output .csv file path",
+            )
+    export_week_to_date_csv_cmd.add_argument(
+            "--include-expenses",
+            action="store_true",
+            help="Include expense details as a newline-separated field",
+            )
+
 
     return parser
 
@@ -577,6 +644,64 @@ def main() -> None:
         write_text_file(args.output, latex_content)
         print(f"Wrote LaTeX report to: {args.output}")
         return
+    if args.command == "export-range-csv":
+        start_date = parse_iso_date(args.date_from).isoformat()
+        end_date = parse_iso_date(args.date_to).isoformat()
+
+        range_rows = load_range_rows(
+                start_date=start_date,
+                end_date=end_date,
+                db_path=args.db_path,
+                )
+
+        write_range_csv(
+                output_path=args.output,
+                range_rows=range_rows,
+                include_expenses=args.include_expenses,
+                )
+
+        print(f"Wrote CSV report to: {args.output}")
+        return
+    if args.command == "export-week-csv":
+        selected_date = parse_iso_date(args.date).isoformat()
+        start_date, end_date = get_week_bounds(selected_date)
+
+        range_rows = load_range_rows(
+                start_date=start_date,
+                end_date=end_date,
+                db_path=args.db_path,
+                )
+
+        write_range_csv(
+                output_path=args.output,
+                range_rows=range_rows,
+                include_expenses=args.include_expenses,
+                )
+
+        print(f"Wrote CSV report to: {args.output}")
+        return
+
+    if args.command == "export-week-to-date-csv":
+        selected_date = resolve_report_date(args.date)
+        start_date, _ = get_week_bounds(selected_date)
+        end_date = selected_date
+
+        range_rows = load_range_rows(
+                start_date=start_date,
+                end_date=end_date,
+                db_path=args.db_path,
+                )
+
+        write_range_csv(
+                output_path=args.output,
+                range_rows=range_rows,
+                include_expenses=args.include_expenses,
+                )
+
+        print(f"Wrote CSV report to: {args.output}")
+        return
+
+
 
 
 if __name__ == "__main__":
