@@ -304,3 +304,225 @@ def write_range_csv(
                 output_row["expense_details"] = "\n".join(expense_lines)
 
             writer.writerow(output_row)
+
+def html_escape(text: str) -> str:
+    replacements = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    }
+    return "".join(replacements.get(char, char) for char in text)
+
+
+def generate_range_html(
+    title: str,
+    start_date_display: str,
+    end_date_display: str,
+    range_rows: list[dict[str, Any]],
+) -> str:
+    body_rows: list[str] = []
+
+    for index, row in enumerate(range_rows):
+        row_id = f"expenses-{index}"
+        display_date = html_escape(row["date"])
+
+        if row["has_data"]:
+            if row["expenses"]:
+                expenses_cell = (
+                    f'<button type="button" class="expenses-button" '
+                    f'onclick="toggleExpenses(\'{row_id}\')">'
+                    f'{format_money(row["expenses_total"])} ▾'
+                    f'</button>'
+                )
+            else:
+                expenses_cell = format_money(row["expenses_total"])
+
+            main_row = f"""
+<tr class="{'empty-day' if not row['has_data'] else ''}">
+  <td>{display_date}</td>
+  <td>{format_money(row["cash_in_report"])}</td>
+  <td>{format_money(row["cash_in_till"])}</td>
+  <td>{expenses_cell}</td>
+  <td>{format_money(row["till_plus_expenses"])}</td>
+  <td>{format_money(row["difference"])}</td>
+  <td class="separator-left">{format_money(row["cum_cash_in_report"])}</td>
+  <td>{format_money(row["cum_cash_in_till"])}</td>
+  <td>{format_money(row["cum_expenses_total"])}</td>
+  <td>{format_money(row["cum_till_plus_expenses"])}</td>
+  <td>{format_money(row["cum_difference"])}</td>
+</tr>
+""".strip()
+
+            body_rows.append(main_row)
+
+            if row["expenses"]:
+                expense_items: list[str] = []
+                for expense in row["expenses"]:
+                    amount = format_money(Decimal(str(expense["amount"])))
+                    description = str(expense["description"]).strip()
+                    if description:
+                        item = (
+                            f"<li>£{amount} — {html_escape(description)}</li>"
+                        )
+                    else:
+                        item = f"<li>£{amount}</li>"
+                    expense_items.append(item)
+
+                expenses_row = f"""
+<tr id="{row_id}" class="expenses-row">
+  <td colspan="11" class="expenses-cell">
+    <strong>Expenses for {display_date}:</strong>
+    <ul class="expenses-list">
+      {"".join(expense_items)}
+    </ul>
+  </td>
+</tr>
+""".strip()
+
+                body_rows.append(expenses_row)
+
+        else:
+            main_row = f"""
+<tr class="empty-day">
+  <td>{display_date}</td>
+  <td>-</td>
+  <td>-</td>
+  <td>-</td>
+  <td>-</td>
+  <td>-</td>
+  <td class="separator-left">{format_money(row["cum_cash_in_report"])}</td>
+  <td>{format_money(row["cum_cash_in_till"])}</td>
+  <td>{format_money(row["cum_expenses_total"])}</td>
+  <td>{format_money(row["cum_till_plus_expenses"])}</td>
+  <td>{format_money(row["cum_difference"])}</td>
+</tr>
+""".strip()
+
+            body_rows.append(main_row)
+
+    table_rows = "\n".join(body_rows)
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{html_escape(title)}</title>
+  <style>
+    body {{
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      color: #222;
+    }}
+
+    h1 {{
+      margin-top: 0;
+      margin-bottom: 8px;
+    }}
+
+    p {{
+      margin-top: 0;
+      margin-bottom: 16px;
+    }}
+
+    table {{
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 14px;
+    }}
+
+    th, td {{
+      border: 1px solid #999;
+      padding: 8px 10px;
+      text-align: right;
+      vertical-align: top;
+    }}
+
+    th:first-child,
+    td:first-child {{
+      text-align: left;
+      white-space: nowrap;
+    }}
+
+    .separator-left {{
+      border-left: 3px solid #444 !important;
+    }}
+
+    .expenses-button {{
+      padding: 4px 8px;
+      cursor: pointer;
+    }}
+
+    .expenses-row {{
+      display: none;
+    }}
+
+    .expenses-row.open {{
+      display: table-row;
+    }}
+
+    .expenses-cell {{
+      text-align: left;
+      background: #f7f7f7;
+    }}
+
+    .expenses-list {{
+      margin: 8px 0 0 0;
+      padding-left: 20px;
+    }}
+
+    .expenses-list li {{
+      margin: 4px 0;
+    }}
+
+    .empty-day {{
+      color: #666;
+    }}
+  </style>
+</head>
+<body>
+  <h1>{html_escape(title)}</h1>
+  <p><strong>Range:</strong> {html_escape(start_date_display)} — {html_escape(end_date_display)}</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Cash Rep</th>
+        <th>Cash Till</th>
+        <th>Expenses</th>
+        <th>Till+Exp</th>
+        <th>Diff</th>
+        <th class="separator-left">Cum Rep</th>
+        <th>Cum Till</th>
+        <th>Cum Exp</th>
+        <th>Cum T+E</th>
+        <th>Cum Diff</th>
+      </tr>
+    </thead>
+    <tbody>
+      {table_rows}
+    </tbody>
+  </table>
+
+  <script>
+    function toggleExpenses(rowId) {{
+      const row = document.getElementById(rowId);
+      if (!row) {{
+        return;
+      }}
+      row.classList.toggle("open");
+    }}
+  </script>
+</body>
+</html>
+"""
+    return html
+
+
+def write_html_file(path: str | Path, content: str) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(content, encoding="utf-8")

@@ -14,11 +14,12 @@ from db import (
         )
 from parser import parse_expenses_file
 from reports import (
-        build_range_rows,
-        compute_day_summary,
-        generate_range_latex,
-        write_range_csv
-        )
+    build_range_rows,
+    compute_day_summary,
+    generate_range_latex,
+    generate_range_html,
+    write_html_file,
+)
 from utils import (
         format_display_date,
         get_week_bounds,
@@ -421,6 +422,70 @@ def build_parser() -> argparse.ArgumentParser:
             action="store_true",
             help="Include expense details as a newline-separated field",
             )
+    export_range_html_cmd = subparsers.add_parser(
+            "export-range-html",
+            help="Export a date range report as an HTML file",
+            )
+    export_range_html_cmd.add_argument(
+            "--from",
+            dest="date_from",
+            required=True,
+            help="Start date in YYYY-MM-DD format",
+            )
+    export_range_html_cmd.add_argument(
+            "--to",
+            dest="date_to",
+            required=True,
+            help="End date in YYYY-MM-DD format",
+            )
+    export_range_html_cmd.add_argument(
+            "--output",
+            required=True,
+            help="Output .html file path",
+            )
+    export_range_html_cmd.add_argument(
+            "--title",
+            default="Cash Reconciliation Report",
+            help="Document title",
+            )
+    export_week_html_cmd = subparsers.add_parser(
+            "export-week-html",
+            help="Export the full Monday-to-Sunday week as an HTML file",
+            )
+    export_week_html_cmd.add_argument(
+            "--date",
+            required=True,
+            help="Any date within the target week (YYYY-MM-DD)",
+            )
+    export_week_html_cmd.add_argument(
+            "--output",
+            required=True,
+            help="Output .html file path",
+            )
+    export_week_html_cmd.add_argument(
+            "--title",
+            default="Weekly Cash Reconciliation Report",
+            help="Document title",
+            )
+
+    export_week_to_date_html_cmd = subparsers.add_parser(
+            "export-week-to-date-html",
+            help="Export Monday up to the given date as an HTML file",
+            )
+    export_week_to_date_html_cmd.add_argument(
+            "--date",
+            help="End date in YYYY-MM-DD format. Defaults to today.",
+            )
+    export_week_to_date_html_cmd.add_argument(
+            "--output",
+            required=True,
+            help="Output .html file path",
+            )
+    export_week_to_date_html_cmd.add_argument(
+            "--title",
+            default="Week-to-Date Cash Reconciliation Report",
+            help="Document title",
+            )
 
 
     return parser
@@ -700,6 +765,70 @@ def main() -> None:
 
         print(f"Wrote CSV report to: {args.output}")
         return
+    if args.command == "export-range-html":
+        start_date = parse_iso_date(args.date_from).isoformat()
+        end_date = parse_iso_date(args.date_to).isoformat()
+
+        range_rows = load_range_rows(
+                start_date=start_date,
+                end_date=end_date,
+                db_path=args.db_path,
+                )
+
+        html_content = generate_range_html(
+                title=args.title,
+                start_date_display=format_display_date(start_date),
+                end_date_display=format_display_date(end_date),
+                range_rows=range_rows,
+                )
+
+        write_html_file(args.output, html_content)
+        print(f"Wrote HTML report to: {args.output}")
+        return
+
+    if args.command == "export-week-html":
+        selected_date = parse_iso_date(args.date).isoformat()
+        start_date, end_date = get_week_bounds(selected_date)
+
+        range_rows = load_range_rows(
+                start_date=start_date,
+                end_date=end_date,
+                db_path=args.db_path,
+                )
+
+        html_content = generate_range_html(
+                title=args.title,
+                start_date_display=format_display_date(start_date),
+                end_date_display=format_display_date(end_date),
+                range_rows=range_rows,
+                )
+
+        write_html_file(args.output, html_content)
+        print(f"Wrote HTML report to: {args.output}")
+        return
+
+    if args.command == "export-week-to-date-html":
+        selected_date = resolve_report_date(args.date)
+        start_date, _ = get_week_bounds(selected_date)
+        end_date = selected_date
+
+        range_rows = load_range_rows(
+                start_date=start_date,
+                end_date=end_date,
+                db_path=args.db_path,
+                )
+
+        html_content = generate_range_html(
+                title=args.title,
+                start_date_display=format_display_date(start_date),
+                end_date_display=format_display_date(end_date),
+                range_rows=range_rows,
+                )
+
+        write_html_file(args.output, html_content)
+        print(f"Wrote HTML report to: {args.output}")
+        return
+
 
 
 
