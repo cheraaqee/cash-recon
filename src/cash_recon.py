@@ -14,12 +14,12 @@ from db import (
         )
 from parser import parse_expenses_file
 from reports import (
-    build_range_rows,
-    compute_day_summary,
-    generate_range_latex,
-    generate_range_html,
-    write_html_file,
-)
+        build_range_rows,
+        compute_day_summary,
+        generate_range_latex,
+        generate_range_html,
+        write_html_file,
+        )
 from utils import (
         format_display_date,
         get_week_bounds,

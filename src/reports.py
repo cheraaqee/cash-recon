@@ -307,21 +307,21 @@ def write_range_csv(
 
 def html_escape(text: str) -> str:
     replacements = {
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-    }
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+            }
     return "".join(replacements.get(char, char) for char in text)
 
 
 def generate_range_html(
-    title: str,
-    start_date_display: str,
-    end_date_display: str,
-    range_rows: list[dict[str, Any]],
-) -> str:
+        title: str,
+        start_date_display: str,
+        end_date_display: str,
+        range_rows: list[dict[str, Any]],
+        ) -> str:
     body_rows: list[str] = []
 
     for index, row in enumerate(range_rows):
@@ -331,11 +331,11 @@ def generate_range_html(
         if row["has_data"]:
             if row["expenses"]:
                 expenses_cell = (
-                    f'<button type="button" class="expenses-button" '
-                    f'onclick="toggleExpenses(\'{row_id}\')">'
-                    f'{format_money(row["expenses_total"])} ▾'
-                    f'</button>'
-                )
+                        f'<button type="button" class="expenses-button" '
+                        f'onclick="toggleExpenses(\'{row_id}\')">'
+                        f'{format_money(row["expenses_total"])} ▾'
+                        f'</button>'
+                        )
             else:
                 expenses_cell = format_money(row["expenses_total"])
 
@@ -364,8 +364,8 @@ def generate_range_html(
                     description = str(expense["description"]).strip()
                     if description:
                         item = (
-                            f"<li>£{amount} — {html_escape(description)}</li>"
-                        )
+                                f"<li>£{amount} — {html_escape(description)}</li>"
+                                )
                     else:
                         item = f"<li>£{amount}</li>"
                     expense_items.append(item)
