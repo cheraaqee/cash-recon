@@ -5,39 +5,48 @@ from typing import Any
 import csv
 from pathlib import Path
 
-
 ZERO = Decimal("0")
 
 
 def compute_day_summary(
-        cash_in_report: Decimal,
-        cash_in_till: Decimal,
-        expenses: list[dict[str, Any]],
-        ) -> dict[str, Decimal]:
+    cash_in_report: Decimal,
+    cash_in_till: Decimal,
+    previous_till: Decimal,
+    expenses: list[dict[str, Any]],
+) -> dict[str, Decimal]:
     expenses_total = sum(
-            (Decimal(str(expense["amount"])) for expense in expenses),
-            start=ZERO,
-            )
-    till_plus_expenses = cash_in_till + expenses_total
-    difference = till_plus_expenses - cash_in_report
+        (Decimal(str(expense["amount"])) for expense in expenses),
+        start=ZERO,
+    )
+
+    cash_added_to_till = cash_in_till - previous_till
+    reconciled_total = cash_added_to_till + expenses_total
+    difference = reconciled_total - cash_in_report
 
     return {
-            "expenses_total": expenses_total,
-            "till_plus_expenses": till_plus_expenses,
-            "difference": difference,
-            }
+        "previous_till": previous_till,
+        "cash_added_to_till": cash_added_to_till,
+        "expenses_total": expenses_total,
+        "reconciled_total": reconciled_total,
+        "difference": difference,
+        # Temporary compatibility with existing output code.
+        "reconciled_total": reconciled_total,
+    }
 
 
 def build_range_rows(
-        date_strings: list[str],
-        reports_by_date: dict[str, dict[str, Decimal]],
-        expenses_by_date: dict[str, list[dict[str, Any]]],
-        ) -> list[dict[str, Any]]:
+    date_strings: list[str],
+    reports_by_date: dict[str, dict[str, Decimal]],
+    expenses_by_date: dict[str, list[dict[str, Any]]],
+    initial_previous_till: Decimal = ZERO,
+) -> list[dict[str, Any]]:
     cumulative_cash_report = ZERO
-    cumulative_cash_till = ZERO
+    cumulative_cash_added_to_till = ZERO
     cumulative_expenses = ZERO
-    cumulative_till_plus_expenses = ZERO
+    cumulative_reconciled_total = ZERO
     cumulative_difference = ZERO
+
+    previous_till = initial_previous_till
 
     rows: list[dict[str, Any]] = []
 
@@ -46,64 +55,75 @@ def build_range_rows(
         expenses = expenses_by_date.get(date_text, [])
 
         if report is None:
-            day_cash_report = ZERO
-            day_cash_till = ZERO
             summary = {
-                    "expenses_total": ZERO,
-                    "till_plus_expenses": ZERO,
-                    "difference": ZERO,
-                    }
+                "previous_till": previous_till,
+                "cash_added_to_till": ZERO,
+                "expenses_total": ZERO,
+                "reconciled_total": ZERO,
+                "difference": ZERO,
+                "reconciled_total": ZERO,
+            }
+            day_cash_report = ZERO
+            day_cash_till = previous_till
             has_data = False
         else:
             day_cash_report = report["cash_in_report"]
             day_cash_till = report["cash_in_till"]
+
             summary = compute_day_summary(
-                    cash_in_report=day_cash_report,
-                    cash_in_till=day_cash_till,
-                    expenses=expenses,
-                    )
+                cash_in_report=day_cash_report,
+                cash_in_till=day_cash_till,
+                previous_till=previous_till,
+                expenses=expenses,
+            )
+
+            previous_till = day_cash_till
             has_data = True
 
         cumulative_cash_report += day_cash_report
-        cumulative_cash_till += day_cash_till
+        cumulative_cash_added_to_till += summary["cash_added_to_till"]
         cumulative_expenses += summary["expenses_total"]
-        cumulative_till_plus_expenses += summary["till_plus_expenses"]
+        cumulative_reconciled_total += summary["reconciled_total"]
         cumulative_difference += summary["difference"]
 
         rows.append(
-                {
-                    "date": date_text,
-                    "has_data": has_data,
-                    "cash_in_report": day_cash_report,
-                    "cash_in_till": day_cash_till,
-                    "expenses_total": summary["expenses_total"],
-                    "till_plus_expenses": summary["till_plus_expenses"],
-                    "difference": summary["difference"],
-                    "cum_cash_in_report": cumulative_cash_report,
-                    "cum_cash_in_till": cumulative_cash_till,
-                    "cum_expenses_total": cumulative_expenses,
-                    "cum_till_plus_expenses": cumulative_till_plus_expenses,
-                    "cum_difference": cumulative_difference,
-                    "expenses": expenses,
-                    }
-                )
+            {
+                "date": date_text,
+                "has_data": has_data,
+                "previous_till": summary["previous_till"],
+                "cash_in_report": day_cash_report,
+                "cash_in_till": day_cash_till,
+                "cash_added_to_till": summary["cash_added_to_till"],
+                "expenses_total": summary["expenses_total"],
+                "reconciled_total": summary["reconciled_total"],
+                "reconciled_total": summary["reconciled_total"],
+                "difference": summary["difference"],
+                "cum_cash_in_report": cumulative_cash_report,
+                "cum_cash_added_to_till": cumulative_cash_added_to_till,
+                "cum_expenses_total": cumulative_expenses,
+                "cum_reconciled_total": cumulative_reconciled_total,
+                "cum_reconciled_total": cumulative_reconciled_total,
+                "cum_difference": cumulative_difference,
+                "expenses": expenses,
+            }
+        )
 
     return rows
 
 
 def latex_escape(text: str) -> str:
     replacements = {
-            "\\": r"\textbackslash{}",
-            "&": r"\&",
-            "%": r"\%",
-            "$": r"\$",
-            "#": r"\#",
-            "_": r"\_",
-            "{": r"\{",
-            "}": r"\}",
-            "~": r"\textasciitilde{}",
-            "^": r"\textasciicircum{}",
-            }
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
 
     escaped = []
     for char in text:
@@ -132,62 +152,63 @@ def build_expenses_cell(expenses: list[dict[str, Any]]) -> str:
     joined_lines = r" \\ ".join(lines)
     return rf"\makecell[l]{{{joined_lines}}}"
 
+
 def generate_range_latex(
-        title: str,
-        start_date_display: str,
-        end_date_display: str,
-        range_rows: list[dict[str, Any]],
-        include_expenses: bool = False,
-        ) -> str:
+    title: str,
+    start_date_display: str,
+    end_date_display: str,
+    range_rows: list[dict[str, Any]],
+    include_expenses: bool = False,
+) -> str:
     if include_expenses:
-        column_spec = (
-                r"p{3.2cm} r r r r r| r r r r r p{5.8cm}"
-                )
+        column_spec = r"p{3.2cm} r r r r r| r r r r r p{5.8cm}"
         header = (
-                r"Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & "
-                r"Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff & Expense Details \\"
-                )
+            r"Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & "
+            r"Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff & Expense Details \\"
+        )
     else:
         column_spec = r"p{3.2cm} r r r r r | r r r r r"
         header = (
-                r"Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & "
-                r"Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff \\"
-                )
+            r"Date & Cash Rep & Cash Till & Expenses & Till+Exp & Diff & "
+            r"Cum Rep & Cum Till & Cum Exp & Cum T+E & Cum Diff \\"
+        )
 
     body_lines: list[str] = []
 
     for row in range_rows:
         if row["has_data"]:
             values = [
-                    latex_escape(row["date"]),
-                    format_money(row["cash_in_report"]),
-                    format_money(row["cash_in_till"]),
-                    format_money(row["expenses_total"]),
-                    format_money(row["till_plus_expenses"]),
-                    format_money(row["difference"]),
-                    format_money(row["cum_cash_in_report"]),
-                    format_money(row["cum_cash_in_till"]),
-                    format_money(row["cum_expenses_total"]),
-                    format_money(row["cum_till_plus_expenses"]),
-                    format_money(row["cum_difference"]),
-                    ]
+                latex_escape(row["date"]),
+                format_money(row["cash_in_report"]),
+                format_money(row["cash_in_till"]),
+                format_money(row["expenses_total"]),
+                format_money(row["reconciled_total"]),
+                format_money(row["difference"]),
+                format_money(row["cum_cash_in_report"]),
+                format_money(row["cum_cash_added_to_till"]),
+                format_money(row["cum_expenses_total"]),
+                format_money(row["cum_reconciled_total"]),
+                format_money(row["cum_difference"]),
+            ]
         else:
             values = [
-                    latex_escape(row["date"]),
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    format_money(row["cum_cash_in_report"]),
-                    format_money(row["cum_cash_in_till"]),
-                    format_money(row["cum_expenses_total"]),
-                    format_money(row["cum_till_plus_expenses"]),
-                    format_money(row["cum_difference"]),
-                    ]
+                latex_escape(row["date"]),
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                format_money(row["cum_cash_in_report"]),
+                format_money(row["cum_cash_added_to_till"]),
+                format_money(row["cum_expenses_total"]),
+                format_money(row["cum_reconciled_total"]),
+                format_money(row["cum_difference"]),
+            ]
 
         if include_expenses:
-            expense_cell = build_expenses_cell(row["expenses"]) if row["has_data"] else ""
+            expense_cell = (
+                build_expenses_cell(row["expenses"]) if row["has_data"] else ""
+            )
             values.append(expense_cell)
 
         line = " & ".join(values) + r" \\ \hline"
@@ -240,33 +261,33 @@ def generate_range_latex(
     \end{{landscape}}
 
     \end{{document}}
-    """.strip(
-            "\n"
-            )
+    """.strip("\n")
 
     return latex
+
+
 def write_range_csv(
-        output_path: str | Path,
-        range_rows: list[dict[str, Any]],
-        include_expenses: bool = False,
-        ) -> None:
+    output_path: str | Path,
+    range_rows: list[dict[str, Any]],
+    include_expenses: bool = False,
+) -> None:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     fieldnames = [
-            "date",
-            "has_data",
-            "cash_in_report",
-            "cash_in_till",
-            "expenses_total",
-            "till_plus_expenses",
-            "difference",
-            "cum_cash_in_report",
-            "cum_cash_in_till",
-            "cum_expenses_total",
-            "cum_till_plus_expenses",
-            "cum_difference",
-            ]
+        "date",
+        "has_data",
+        "cash_in_report",
+        "cash_in_till",
+        "expenses_total",
+        "reconciled_total",
+        "difference",
+        "cum_cash_in_report",
+        "cum_cash_added_to_till",
+        "cum_expenses_total",
+        "cum_reconciled_total",
+        "cum_difference",
+    ]
 
     if include_expenses:
         fieldnames.append("expense_details")
@@ -277,19 +298,29 @@ def write_range_csv(
 
         for row in range_rows:
             output_row = {
-                    "date": row["date"],
-                    "has_data": "yes" if row["has_data"] else "no",
-                    "cash_in_report": format_money(row["cash_in_report"]) if row["has_data"] else "",
-                    "cash_in_till": format_money(row["cash_in_till"]) if row["has_data"] else "",
-                    "expenses_total": format_money(row["expenses_total"]) if row["has_data"] else "",
-                    "till_plus_expenses": format_money(row["till_plus_expenses"]) if row["has_data"] else "",
-                    "difference": format_money(row["difference"]) if row["has_data"] else "",
-                    "cum_cash_in_report": format_money(row["cum_cash_in_report"]),
-                    "cum_cash_in_till": format_money(row["cum_cash_in_till"]),
-                    "cum_expenses_total": format_money(row["cum_expenses_total"]),
-                    "cum_till_plus_expenses": format_money(row["cum_till_plus_expenses"]),
-                    "cum_difference": format_money(row["cum_difference"]),
-                    }
+                "date": row["date"],
+                "has_data": "yes" if row["has_data"] else "no",
+                "cash_in_report": (
+                    format_money(row["cash_in_report"]) if row["has_data"] else ""
+                ),
+                "cash_in_till": (
+                    format_money(row["cash_in_till"]) if row["has_data"] else ""
+                ),
+                "expenses_total": (
+                    format_money(row["expenses_total"]) if row["has_data"] else ""
+                ),
+                "reconciled_total": (
+                    format_money(row["reconciled_total"]) if row["has_data"] else ""
+                ),
+                "difference": (
+                    format_money(row["difference"]) if row["has_data"] else ""
+                ),
+                "cum_cash_in_report": format_money(row["cum_cash_in_report"]),
+                "cum_cash_added_to_till": format_money(row["cum_cash_added_to_till"]),
+                "cum_expenses_total": format_money(row["cum_expenses_total"]),
+                "cum_reconciled_total": format_money(row["cum_reconciled_total"]),
+                "cum_difference": format_money(row["cum_difference"]),
+            }
 
             if include_expenses:
                 expense_lines: list[str] = []
@@ -305,23 +336,24 @@ def write_range_csv(
 
             writer.writerow(output_row)
 
+
 def html_escape(text: str) -> str:
     replacements = {
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#39;",
-            }
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    }
     return "".join(replacements.get(char, char) for char in text)
 
 
 def generate_range_html(
-        title: str,
-        start_date_display: str,
-        end_date_display: str,
-        range_rows: list[dict[str, Any]],
-        ) -> str:
+    title: str,
+    start_date_display: str,
+    end_date_display: str,
+    range_rows: list[dict[str, Any]],
+) -> str:
     body_rows: list[str] = []
 
     for index, row in enumerate(range_rows):
@@ -331,11 +363,11 @@ def generate_range_html(
         if row["has_data"]:
             if row["expenses"]:
                 expenses_cell = (
-                        f'<button type="button" class="expenses-button" '
-                        f'onclick="toggleExpenses(\'{row_id}\')">'
-                        f'{format_money(row["expenses_total"])} ▾'
-                        f'</button>'
-                        )
+                    f'<button type="button" class="expenses-button" '
+                    f"onclick=\"toggleExpenses('{row_id}')\">"
+                    f'{format_money(row["expenses_total"])} ▾'
+                    f"</button>"
+                )
             else:
                 expenses_cell = format_money(row["expenses_total"])
 
@@ -345,12 +377,12 @@ def generate_range_html(
   <td>{format_money(row["cash_in_report"])}</td>
   <td>{format_money(row["cash_in_till"])}</td>
   <td>{expenses_cell}</td>
-  <td>{format_money(row["till_plus_expenses"])}</td>
+  <td>{format_money(row["reconciled_total"])}</td>
   <td>{format_money(row["difference"])}</td>
   <td class="separator-left">{format_money(row["cum_cash_in_report"])}</td>
-  <td>{format_money(row["cum_cash_in_till"])}</td>
+  <td>{format_money(row["cum_cash_added_to_till"])}</td>
   <td>{format_money(row["cum_expenses_total"])}</td>
-  <td>{format_money(row["cum_till_plus_expenses"])}</td>
+  <td>{format_money(row["cum_reconciled_total"])}</td>
   <td>{format_money(row["cum_difference"])}</td>
 </tr>
 """.strip()
@@ -363,9 +395,7 @@ def generate_range_html(
                     amount = format_money(Decimal(str(expense["amount"])))
                     description = str(expense["description"]).strip()
                     if description:
-                        item = (
-                                f"<li>£{amount} — {html_escape(description)}</li>"
-                                )
+                        item = f"<li>£{amount} — {html_escape(description)}</li>"
                     else:
                         item = f"<li>£{amount}</li>"
                     expense_items.append(item)
@@ -393,9 +423,9 @@ def generate_range_html(
   <td>-</td>
   <td>-</td>
   <td class="separator-left">{format_money(row["cum_cash_in_report"])}</td>
-  <td>{format_money(row["cum_cash_in_till"])}</td>
+  <td>{format_money(row["cum_cash_added_to_till"])}</td>
   <td>{format_money(row["cum_expenses_total"])}</td>
-  <td>{format_money(row["cum_till_plus_expenses"])}</td>
+  <td>{format_money(row["cum_reconciled_total"])}</td>
   <td>{format_money(row["cum_difference"])}</td>
 </tr>
 """.strip()

@@ -19,8 +19,7 @@ def get_connection(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 def init_db(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     with get_connection(db_path) as conn:
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS daily_reports (
                 report_date TEXT PRIMARY KEY,
                 cash_in_report TEXT NOT NULL,
@@ -42,8 +41,7 @@ def init_db(db_path: str | Path = DEFAULT_DB_PATH) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_expenses_report_date
             ON expenses(report_date);
-            """
-        )
+            """)
 
 
 def upsert_day_report(
@@ -170,3 +168,33 @@ def get_expenses_in_range(
         ).fetchall()
 
     return rows
+
+
+def get_previous_till_for_day(
+    report_date: str,
+    week_start_date: str,
+    db_path: str | Path = DEFAULT_DB_PATH,
+) -> Decimal:
+    """
+    Find the latest recorded end-of-day till before report_date,
+    but only within the same week.
+
+    If none exists, return 0.
+    """
+    with get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT cash_in_till
+            FROM daily_reports
+            WHERE report_date < ?
+              AND report_date >= ?
+            ORDER BY report_date DESC
+            LIMIT 1
+            """,
+            (report_date, week_start_date),
+        ).fetchone()
+
+    if row is None:
+        return Decimal("0")
+
+    return Decimal(row["cash_in_till"])

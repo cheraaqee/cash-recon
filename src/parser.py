@@ -50,9 +50,11 @@ def parse_expenses_file(file_path: str | Path) -> list[dict[str, str | Decimal]]
                     f"Negative amounts are not allowed on line {line_number}: {amount}"
                 )
 
-            expenses.append({
-                "amount": amount,
-                "description": description,
-            })
+            expenses.append(
+                {
+                    "amount": amount,
+                    "description": description,
+                }
+            )
 
     return expenses
